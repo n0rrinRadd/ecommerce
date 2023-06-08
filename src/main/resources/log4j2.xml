@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="INFO">
+
+    <Appenders>
+        <Console name="console" target="SYSTEM_OUT">
+            <PatternLayout pattern="%d{HH:mm:ss.SSS} [%p] [%t] %m%n"/>
+        </Console>
+    </Appenders>
+
+    <Loggers>
+        <Logger name="com.ecommerce.task" level="info" additivity="false">
+            <AppenderRef ref="console"/>
+        </Logger>
+        <Root level="error" additivity="false">
+            <AppenderRef ref="console"/>
+        </Root>
+    </Loggers>
+
+</Configuration>

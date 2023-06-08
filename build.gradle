@@ -1,0 +1,153 @@
+buildscript {
+    ['plugins-release', 'libs-release', 'libs-snapshot'].each {
+        repositories {
+            maven {
+                url "https://ecommerceinc.jfrog.io/ecommerceinc/${it}"
+                credentials {
+                    username = "${artifactory_user}"
+                    password = "${artifactory_password}"
+                }
+            }
+        }
+    }
+}
+
+plugins {
+    id 'java'
+    id 'idea'
+}
+
+group 'search-test'
+version '1.0-SNAPSHOT'
+
+sourceCompatibility = 1.8
+
+repositories {
+    jcenter()
+    maven {
+        url "${artifactory_server}/ext-release-local"
+        credentials {
+            username = artifactory_user
+            password = artifactory_password
+        }
+    }
+    maven {
+        url "${artifactory_server}/libs-release"
+        credentials {
+            username = artifactory_user
+            password = artifactory_password
+        }
+    }
+}
+
+dependencies {
+    compile group: 'org.seleniumhq.selenium', name: 'selenium-java', version: '3+'
+    compile group: 'io.github.bonigarcia' , name: 'webdrivermanager', version: '4.0.0'
+    compile group: 'org.testng', name: 'testng', version: '6.14.3'
+    compile group: 'org.slf4j', name: 'slf4j-api', version: '1.7.25'
+    compile group: 'org.springframework', name: 'spring-web', version: '4.3.8.RELEASE'
+    compile group: 'com.fasterxml.jackson.core', name: 'jackson-core', version: '2.4.1'
+    compile group: 'com.fasterxml.jackson.core', name: 'jackson-annotations', version: '2.4.1'
+    compile group: 'com.fasterxml.jackson.core', name: 'jackson-databind', version: '2.4.1'
+    compile group: 'org.apache.logging.log4j', name: 'log4j-core', version: '2.3'
+    compile group: 'org.apache.commons', name: 'commons-lang3', version: '3.0'
+    compile group: 'site.commerce', name: 'commerce-api', version: commerce_api_version
+    compile group: 'org.assertj', name: 'assertj-core', version: '3.11.1'
+    compile group: 'com.jayway.restassured', name: 'rest-assured', version: '2.9.0'
+    compile group: 'com.codepine.api', name: 'testrail-api-java-client', version: '2.0.1'
+    compile group: 'com.googlecode.json-simple', name: 'json-simple', version: '1.1.1'
+    compile group: 'info.cukes', name: 'cucumber-testng', version: '1.2.6'
+    compile group: 'io.cucumber', name: 'cucumber-picocontainer', version: '5.5.0'
+    implementation group: 'io.cucumber', name: 'cucumber-java', version: '5.5.0'
+}
+
+configurations {
+    cucumberRuntime {
+        extendsFrom implementation
+    }
+}
+
+task cucumber(type: JavaExec) {
+    dependsOn assemble, compileTestJava
+    main = "cucumber.api.cli.Main"
+    classpath = configurations.cucumberRuntime + sourceSets.main.output + sourceSets.test.output
+    args = ['--strict',
+            '--plugin', 'pretty',
+            '--plugin', 'json:build/reports/cucumber-report.json',
+            '--plugin', 'html:build/reports/cucumber-report.html',
+            '--plugin', 'junit:build/reports/tests/test/cucumber.xml',
+            '--glue', 'com.ecommerce.steps',
+            '--threads', Runtime.runtime.availableProcessors(),
+            'src/test/java'
+    ]
+    systemProperties = System.getProperties()
+}
+
+task upload(type: JavaExec) {
+    dependsOn assemble, compileJava
+    classpath = sourceSets.main.runtimeClasspath
+    main = "com.ecommerce.testrail.TestRailIntegration"
+    String branchName = "UNKNOWN"
+    String envName = "UNKNOWN"
+    if(project.hasProperty('baseUrl')) {
+        envName = project.findProperty('baseUrl')
+    }
+    if(project.hasProperty("branch") && !("$branch".equalsIgnoreCase("master"))) {
+        branchName = "$branch"
+    }
+    args = ["$envName", "$branchName"]
+
+}
+
+test {
+    useTestNG() {
+        useDefaultListeners = false
+        listeners << 'com.ecommerce.testrail.JSONReporter'
+        outputDirectory = file("$projectDir/build/reports/")
+        if (project.hasProperty('e2eSmoke')) {
+            includeGroups 'e2eSmoke'
+        }
+        if (project.hasProperty('e2eShakedown')) {
+            includeGroups 'e2eShakedown'
+        }
+        if (project.hasProperty('apiSmoke')) {
+            includeGroups 'apiSmoke'
+        }
+        if (project.hasProperty('apiShakedown')) {
+            includeGroups 'apiShakedown'
+        }
+        if (project.hasProperty('sauce')) {
+            includeGroups 'sauce'
+        }
+    }
+
+    if (project.hasProperty('browserEnv')) {
+        systemProperties['browserEnv'] = project.findProperty('browserEnv')
+    }
+    if (project.hasProperty('browserType')) {
+        systemProperties['browserType'] = project.findProperty('browserType')
+    }
+    if (project.hasProperty('baseUrl')) {
+        systemProperties['baseUrl'] = project.findProperty('baseUrl')
+     }
+    systemProperty "cucumber.options", System.getProperty("cucumber.options")
+
+    // governs the maximum simultaneous JVMs that are spawned, i.e. how many tests that can run
+    maxParallelForks = Runtime.runtime.availableProcessors()
+
+    // causes a test-running JVM to close and be replaced by a brand new one after the specified number of tests have run under an instance
+    forkEvery = 1
+
+    // logging
+    testLogging {
+        events "passed", "skipped", "failed"
+    }
+
+    // reporting
+    reports {
+        html.enabled = true
+    }
+    // show standard out and standard error of the test JVM(s) on the console
+    testLogging.showStandardStreams = true
+    systemProperties System.getProperties()
+}
